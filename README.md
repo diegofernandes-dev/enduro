@@ -2,34 +2,68 @@
 
 Projeto experimental de recriação do **Enduro (Activision, 1983)**, com prioridade para fidelidade de jogabilidade, regras, visual e transições de ambiente.
 
-**Estado atual: baseline documental. O jogo ainda NÃO foi implementado e não há executável disponível.**
+**Estado atual: Marco A entregue** — primeiro jogo dirigível (pista, carro, tráfego, coasting, gamepad InputMap, app macOS). Marcos B/C/D aguardam aprovação.
+
+Entrega detalhada: [docs/MARCO_A_DELIVERY.md](docs/MARCO_A_DELIVERY.md)
 
 ## Direção técnica
 
-- **Godot 4.7.2 stable**, edição padrão + **GDScript** (sem .NET/C#).
-- Jogo 2D com perspectiva pseudo-3D, sem backend.
-- **Principal:** macOS Apple Silicon, aplicativo nativo e Nintendo Switch Pro Controller via Bluetooth.
-- **Secundária:** Web (Godot Compatibility, WebGL 2, export single-thread); Windows após validação.
-- A versão nativa para macOS é a referência primária da dirigibilidade. Compatibilidade Web deve ser testada separadamente.
-- Primeiro a experiência original; melhorias modernas somente após aprovação da recriação.
+- **Godot 4.7.2 stable**, edição padrão + **GDScript** (sem .NET/C#)
+- Jogo 2D com perspectiva pseudo-3D; renderer **Compatibility**
+- **Principal:** macOS Apple Silicon + Nintendo Switch Pro Controller (Bluetooth)
+- **Secundária:** Web e Windows nos marcos posteriores
+- Sem backend, multiplayer ou modernizações prematuras
 
-## Começando pelo repositório
+## Como jogar (Marco A)
 
-1. Leia [AGENTS.md](AGENTS.md) antes de iniciar trabalho por IA.
-2. Leia [as regras e lacunas de pesquisa](docs/GAMEPLAY_SPEC.md).
-3. Leia [controles e plataformas](docs/CONTROLS_AND_PLATFORMS.md).
-4. Execute apenas o [Marco A do plano](docs/DELIVERY_PLAN.md).
-5. Demonstre resultados seguindo [o checklist de validação](docs/VALIDATION.md).
+### Requisitos
 
-O agente deverá criar o projeto Godot, as cenas, o código e o primeiro build como parte do **Marco A**. Esta baseline não afirma que algo foi compilado ou testado.
+- macOS Apple Silicon (ou Universal)
+- Godot 4.7.2 (`brew install --cask godot`) para abrir no editor / reexportar
+- Templates de exportação 4.7.2 (Editor → Manage Export Templates) para gerar o `.app`
 
-## Referências prioritárias
+### App nativo
 
-- [Manual original, reproduzido pelo AtariAge](https://atariage.com/manual_html_page.php?SoftwareLabelID=163)
-- [Godot 4.7.2 stable (arquivo oficial)](https://godotengine.org/download/archive/)
-- [Godot — Controllers, gamepads and joysticks](https://docs.godotengine.org/en/4.5/tutorials/inputs/controllers_gamepads_joysticks.html)
-- [Godot — Exporting for the Web](https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_web.html)
+```bash
+godot --path . --export-release "macOS" build/macos/Enduro.app
+open build/macos/Enduro.app
+```
+
+### Editor
+
+```bash
+godot --path .
+```
+
+### Controles
+
+| Entrada | Ação |
+| --- | --- |
+| Analógico esquerdo / D-pad | Esterçar (proporcional no stick) |
+| A (Nintendo) | Acelerar / confirmar menus |
+| B (Nintendo) | Frear |
+| + | Pausar / retomar |
+| F1 | Diagnóstico do controle (dev) |
+| Teclado W/S, setas, Enter, Esc | Fallback de desenvolvimento |
+
+Ao soltar o acelerador o carro **mantém a velocidade** (coasting), como no manual original.
+
+**COMPATIBILIDADE FÍSICA PENDENTE:** o mapeamento do Switch Pro foi implementado via InputMap/SDL, mas não foi validado com o controle Bluetooth real nesta entrega. Use F1 para confirmar botões no seu Mac.
+
+### Smoke test
+
+```bash
+godot --headless --path . --script res://tools/smoke_test.gd
+```
+
+## Documentação de referência
+
+1. [AGENTS.md](AGENTS.md)
+2. [docs/GAMEPLAY_SPEC.md](docs/GAMEPLAY_SPEC.md)
+3. [docs/CONTROLS_AND_PLATFORMS.md](docs/CONTROLS_AND_PLATFORMS.md)
+4. [docs/DELIVERY_PLAN.md](docs/DELIVERY_PLAN.md)
+5. [docs/VALIDATION.md](docs/VALIDATION.md)
 
 ## Direitos
 
-Projeto independente de estudo, **não oficial e não afiliado à Activision ou Atari**. Enduro e marcas relacionadas pertencem aos respectivos titulares. Não distribuir ROM, código-fonte extraído ou assets proprietários. Gráficos, sons e código devem ser criados originalmente; referências históricas destinam-se à análise e calibração.
+Projeto independente de estudo, **não oficial e não afiliado à Activision ou Atari**. Enduro e marcas relacionadas pertencem aos respectivos titulares. Não distribuir ROM, código-fonte extraído ou assets proprietários.

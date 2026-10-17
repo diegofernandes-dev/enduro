@@ -1,0 +1,106 @@
+[gd_scene load_steps=6 format=3 uid="uid://bq8enduro_main"]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/race/road_view.gd" id="2_road"]
+[ext_resource type="Script" path="res://scripts/ui/hud_lite.gd" id="3_hud"]
+[ext_resource type="Script" path="res://scripts/ui/title_pause.gd" id="4_overlay"]
+[ext_resource type="Script" path="res://scripts/ui/input_diag.gd" id="5_diag"]
+
+[node name="Main" type="Node"]
+script = ExtResource("1_main")
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="RoadView" type="Node2D" parent="World"]
+script = ExtResource("2_road")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+visible = false
+script = ExtResource("3_hud")
+
+[node name="HintLabel" type="Label" parent="HUD"]
+offset_left = 2.0
+offset_top = 2.0
+offset_right = 40.0
+offset_bottom = 12.0
+theme_override_colors/font_color = Color(0.85, 0.85, 0.7, 1)
+theme_override_font_sizes/font_size = 5
+text = ""
+
+[node name="TitlePause" type="CanvasLayer" parent="."]
+layer = 10
+script = ExtResource("4_overlay")
+
+[node name="Center" type="CenterContainer" parent="TitlePause"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="TitlePause/Center"]
+custom_minimum_size = Vector2(140, 90)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="TitlePause/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 6
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 4
+
+[node name="VBox" type="VBoxContainer" parent="TitlePause/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="TitleLabel" type="Label" parent="TitlePause/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "ENDURO"
+horizontal_alignment = 1
+
+[node name="BodyLabel" type="Label" parent="TitlePause/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 5
+text = "A accel  B brake
+Stick steer  + pause"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="ActionLabel" type="Label" parent="TitlePause/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.9, 0.4, 1)
+theme_override_font_sizes/font_size = 6
+text = "> A / Enter"
+horizontal_alignment = 1
+
+[node name="InputDiag" type="CanvasLayer" parent="."]
+layer = 20
+visible = false
+script = ExtResource("5_diag")
+
+[node name="Margin" type="MarginContainer" parent="InputDiag"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 4
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 4
+
+[node name="Panel" type="PanelContainer" parent="InputDiag/Margin"]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="InputDiag/Margin/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 4
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 4
+
+[node name="Text" type="Label" parent="InputDiag/Margin/Panel/Margin"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 5
+text = "INPUT DIAG"
