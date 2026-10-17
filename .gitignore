@@ -1,0 +1,18 @@
+# Godot 4
+.godot/
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+# Builds and local exports
+/build/
+/dist/
+/exports/
+/tmp/
+*.log
+# Local exports: keep preset definitions when the agent adds them,
+# never commit user-specific credentials or signing artifacts.
+*.p12
+*.pfx
+*.keystore
