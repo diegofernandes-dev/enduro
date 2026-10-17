@@ -1,26 +1,14 @@
 extends Node2D
-## Enduro daytime look tuned for 1980s Atari 2600 “feel”:
-## chunky stair-step road edges, solid sprites, thick panel digits, subtle TIA banding.
-## ROM pixels not copied — matched from reference screenshots.
+## Dynamic Enduro daytime renderer driven by measured FidelityLayout constants.
+## No CRT banding, no invented HUD chrome, no modern styling.
+
+const _FL := preload("res://scripts/race/fidelity_layout.gd")
 
 var session: RaceSession
+## When set, overrides live session poses for deterministic captures.
+var fidelity_override: Dictionary = {}
+
 var _blink_t: float = 0.0
-
-const COL_SKY := Color("2C3ABF")
-const COL_GRASS := Color("003900")
-const COL_LINE := Color("ECECEC")
-const COL_MOUNTAIN := Color("C8C8C8")
-const COL_PLAYER := Color("E8E8E8")
-const COL_BLACK := Color("000000")
-const COL_PANEL_RED := Color("BE2517")
-const COL_PANEL_TAN := Color("C8A040")
-const COL_DIGIT := Color("080808")
-
-const W := 160
-const H := 192
-const HORIZON := 66
-const PLAY_BOTTOM := 146
-const PANEL_Y := 150
 
 
 func _process(delta: float) -> void:
@@ -32,112 +20,125 @@ func _draw() -> void:
 	if session == null:
 		return
 	var vs := get_viewport_rect().size
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(vs.x / float(W), vs.y / float(H)))
+	var sx := vs.x / float(_FL.WIDTH)
+	var sy := vs.y / float(_FL.HEIGHT)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(sx, sy))
 
-	draw_rect(Rect2(0, 0, W, HORIZON), COL_SKY)
-	draw_rect(Rect2(0, HORIZON, W, PLAY_BOTTOM - HORIZON + 1), COL_GRASS)
-	draw_rect(Rect2(0, PANEL_Y, W, H - PANEL_Y), COL_BLACK)
-
-	# Subtle TIA-style even-line darkening (not a modern CRT shader)
-	for y in range(0, PLAY_BOTTOM, 2):
-		draw_rect(Rect2(0, y, W, 1), Color(0, 0, 0, 0.12))
+	var L := _FL
+	draw_rect(Rect2(0, 0, L.WIDTH, L.HORIZON_Y), L.COL_SKY)
+	draw_rect(Rect2(0, L.HORIZON_Y, L.WIDTH, L.PLAY_BOTTOM_Y - L.HORIZON_Y + 1), L.COL_GRASS)
+	draw_rect(Rect2(0, L.PANEL_Y, L.WIDTH, L.HEIGHT - L.PANEL_Y), L.COL_BLACK)
 
 	_draw_mountains()
 
 	var pos_z := 0.0
 	var player_x := 0.0
-	var curve := 0.35 ## idle show a gentle curve like reference
-	var playing := session.state != RaceSession.State.TITLE and not session.road.segments.is_empty()
-	if playing:
+	var curve := 1.0 ## daytime reference rightward bend
+	var show_prompt := false
+	var cars: Array = []
+	var use_measured_road := false
+
+	if not fidelity_override.is_empty():
+		pos_z = float(fidelity_override.get("pos_z", 0.0))
+		player_x = float(fidelity_override.get("player_x", 0.0))
+		curve = float(fidelity_override.get("curve", 1.0))
+		cars = fidelity_override.get("cars", [])
+		use_measured_road = bool(fidelity_override.get("measured_road", true))
+	elif session.state == RaceSession.State.TITLE or session.road.segments.is_empty():
+		pos_z = _blink_t * 36.0
+		show_prompt = true
+	else:
 		pos_z = session.road.position_z
 		player_x = session.vehicle.position
 		curve = _sample_curve(pos_z)
+
+	if use_measured_road:
+		_draw_road_edges_measured(pos_z)
 	else:
-		pos_z = _blink_t * 40.0 ## animate dashes on title
+		_draw_road_edges(pos_z, player_x, curve)
 
-	_draw_road_edges(pos_z, player_x, curve)
-
-	if playing:
+	if not fidelity_override.is_empty():
+		for c in cars:
+			_draw_car_at(int(c.x), int(c.y), int(c.scale), c.color)
+		_draw_car_at(int(fidelity_override.get("player_px", 87)), 143, 5, L.COL_PLAYER)
+	elif session.state != RaceSession.State.TITLE and not session.road.segments.is_empty():
 		_draw_traffic(player_x, curve)
-		_draw_player(player_x)
+		var px := int(_FL.road_mid(1.0, player_x, curve))
+		_draw_car_at(px, L.PLAY_BOTTOM_Y - 5, 5, L.COL_PLAYER)
 	else:
-		_draw_car_pixels(80, PLAY_BOTTOM - 1, 5, COL_PLAYER)
-		# Blink like old coin-ops / 2600 attract modes
-		if int(_blink_t * 2.0) % 2 == 0:
-			_draw_pixel_text(50, 98, "PRESS A", COL_LINE)
+		_draw_car_at(87, 143, 5, L.COL_PLAYER)
+		if show_prompt and int(_blink_t * 2.0) % 2 == 0:
+			_draw_pixel_text(50, 98, "PRESS A", L.COL_LINE)
 
 	_draw_panel()
 
 
 func _draw_mountains() -> void:
-	## Low, asymmetric white ranges sitting on the horizon (reference).
-	_range(12, [3, 5, 8, 6, 4, 2])
-	_range(105, [2, 4, 7, 9, 5, 3, 2])
+	_fill_mountain_poly(_FL.MOUNTAIN_LEFT)
+	_fill_mountain_poly(_FL.MOUNTAIN_RIGHT)
 
 
-func _range(x0: int, heights: Array) -> void:
-	var x := x0
-	for h in heights:
-		var hh: int = int(h)
-		for row in range(hh):
-			var half := (row * 2) / maxi(hh, 1) + 1
-			var y := HORIZON - hh + row
-			draw_rect(Rect2(x - half, y, half * 2 + 1, 1), COL_MOUNTAIN)
-		x += hh + 2
+func _fill_mountain_poly(pts: Array) -> void:
+	## Fill measured mountain silhouette as stacked horizontal spans.
+	var y0 := int(pts[0].y)
+	var y_peak := y0
+	for p in pts:
+		y_peak = mini(y_peak, int(p.y))
+	for y in range(y_peak, _FL.HORIZON_Y):
+		var xs: Array[int] = []
+		for i in range(pts.size() - 1):
+			var a: Vector2i = pts[i]
+			var b: Vector2i = pts[i + 1]
+			if (a.y <= y and b.y >= y) or (b.y <= y and a.y >= y):
+				if a.y == b.y:
+					xs.append(a.x)
+					xs.append(b.x)
+				else:
+					var u := float(y - a.y) / float(b.y - a.y)
+					xs.append(int(round(lerpf(float(a.x), float(b.x), u))))
+		if xs.is_empty():
+			continue
+		xs.sort()
+		draw_rect(Rect2(xs[0], y, xs[xs.size() - 1] - xs[0] + 1, 1), _FL.COL_MOUNTAIN)
 
 
-func _draw_road_edges(pos_z: float, player_x: float, curve: float) -> void:
-	## Chunky stair-step borders — hallmark of 2600 pseudo-3D roads.
-	## Draw as short horizontal “bricks”, not thin anti-aliased diagonals.
-	var prev_lx := -1
-	var prev_rx := -1
-	for y in range(HORIZON + 1, PLAY_BOTTOM + 1):
-		var t := float(y - HORIZON) / float(PLAY_BOTTOM - HORIZON)
-		var persp := t * t
-		var road_half := lerpf(2.0, 74.0, persp)
-		var bend := curve * (1.0 - t) * t * 60.0
-		var mid := 80.0 - player_x * 40.0 * persp + bend
-		var lx := int(mid - road_half)
-		var rx := int(mid + road_half)
-
-		# Segment pattern scrolls with travel; denser near camera
-		var brick_h := 1
-		if persp > 0.55:
-			brick_h = 2
-		elif persp > 0.3:
-			brick_h = 1
-
-		var period := 5
-		if persp > 0.7:
-			period = 2
-		elif persp > 0.4:
-			period = 3
-		var phase := int(pos_z * 0.22 + float(PLAY_BOTTOM - y) * 0.5)
-		var on := (phase % period) <= (1 if persp > 0.35 else 0)
-		# Near bottom always nearly solid
-		if persp > 0.75:
-			on = true
-
-		if on:
-			var thick := 2 if persp > 0.35 else 1
-			# Stair-step: hold X until it jumps (classic jagged diagonal)
-			if prev_lx < 0 or absi(lx - prev_lx) >= 1:
-				prev_lx = lx
-			if prev_rx < 0 or absi(rx - prev_rx) >= 1:
-				prev_rx = rx
-			_brick(prev_lx, y, thick, brick_h)
-			_brick(prev_rx - thick + 1, y, thick, brick_h)
+func _draw_road_edges_measured(_pos_z: float) -> void:
+	## Continuous white edges from measured scanlines (Enduro daytime reference).
+	var L := _FL
+	for y in range(L.HORIZON_Y + 2, L.PLAY_BOTTOM_Y + 1):
+		var t := float(y - L.HORIZON_Y) / float(L.PLAY_BOTTOM_Y - L.HORIZON_Y)
+		var edge := _FL.edge_at_y(y)
+		if y < int(L.ROAD_EDGE_SAMPLES[0][0]):
+			var u := float(y - L.HORIZON_Y) / float(int(L.ROAD_EDGE_SAMPLES[0][0]) - L.HORIZON_Y)
+			var mid := lerpf(104.0, float(edge.x + edge.y) * 0.5, u)
+			var half := lerpf(1.5, float(edge.y - edge.x) * 0.5, u * u)
+			edge = Vector2i(int(mid - half), int(mid + half))
+		## Reference edges are 1px (occasionally 2 near camera from JPEG bleed).
+		_plot_edge(edge.x, y, 1)
+		_plot_edge(edge.y, y, 1)
 
 
-func _brick(x: int, y: int, w: int, h: int) -> void:
-	if x < 0 or x >= W or y < HORIZON or y > PLAY_BOTTOM:
+func _draw_road_edges(_pos_z: float, player_x: float, curve: float) -> void:
+	var L := _FL
+	for y in range(L.HORIZON_Y + 1, L.PLAY_BOTTOM_Y + 1):
+		var t := float(y - L.HORIZON_Y) / float(L.PLAY_BOTTOM_Y - L.HORIZON_Y)
+		var half := _FL.road_half(t)
+		var mid := _FL.road_mid(t, player_x, curve)
+		var lx := int(mid - half)
+		var rx := int(mid + half)
+		_plot_edge(lx, y, 1)
+		_plot_edge(rx, y, 1)
+
+
+func _plot_edge(x: int, y: int, thick: int) -> void:
+	if x < 0 or x >= _FL.WIDTH:
 		return
-	draw_rect(Rect2(x, y, mini(w, W - x), mini(h, PLAY_BOTTOM - y + 1)), COL_LINE)
+	draw_rect(Rect2(x, y, thick, 1), _FL.COL_LINE)
 
 
 func _sample_curve(pos_z: float) -> float:
 	if session.road.segments.is_empty():
-		return 0.0
+		return 1.0
 	var base := session.road.find_segment(pos_z)
 	var c := 0.0
 	for n in range(1, 35):
@@ -151,64 +152,60 @@ func _draw_traffic(player_x: float, curve: float) -> void:
 	cars.sort_custom(func(a: TrafficManager.TrafficCar, b: TrafficManager.TrafficCar) -> bool:
 		return _rel_z(a.z) > _rel_z(b.z)
 	)
+	var L := _FL
 	for car in cars:
 		var rel := _rel_z(car.z)
 		if rel < 60.0 or rel > GameParams.SEGMENT_LENGTH * 75.0:
 			continue
 		var depth_t := clampf(1.0 - (rel / (GameParams.SEGMENT_LENGTH * 70.0)), 0.0, 1.0)
-		var persp := depth_t * depth_t
-		var sy := int(lerpf(float(HORIZON + 4), float(PLAY_BOTTOM - 8), persp))
-		var road_half := lerpf(2.0, 74.0, persp)
-		var bend := curve * (1.0 - depth_t) * depth_t * 50.0
-		var mid := 80.0 - player_x * 40.0 * persp + bend
-		var cx := int(mid + car.offset * road_half * 0.75)
-		var scale := clampi(int(lerpf(1.0, 5.0, persp)), 1, 5)
-		_draw_car_pixels(cx, sy, scale, car.color)
+		var t := depth_t * depth_t
+		var sy := int(lerpf(float(L.HORIZON_Y + 4), float(L.PLAY_BOTTOM_Y - 8), t))
+		var half := _FL.road_half(t)
+		var mid := _FL.road_mid(t, player_x, curve)
+		var cx := int(mid + car.offset * half * 0.75)
+		var scale := clampi(int(lerpf(1.0, 5.0, t)), 1, 5)
+		_draw_car_at(cx, sy, scale, car.color)
 
 
 func _rel_z(car_z: float) -> float:
 	return session.traffic.relative_z(car_z, session.road.position_z, session.road.track_length)
 
 
-func _draw_player(player_x: float) -> void:
-	_draw_car_pixels(int(80.0 + player_x * 36.0), PLAY_BOTTOM - 1, 5, COL_PLAYER)
-
-
-func _draw_car_pixels(cx: int, bottom_y: int, scale: int, col: Color) -> void:
-	## Wide formula silhouette drawn as solid pixels (no texture filter blur).
+func _draw_car_at(cx: int, bottom_y: int, scale: int, col: Color) -> void:
+	## Full-size silhouette measured from enduro_day_ref_160.png (bbox 79–94 × 135–143).
 	var rows: Array[String]
-	match clampi(scale, 1, 5):
-		1:
-			rows = ["111", "111"]
-		2:
-			rows = ["01110", "11111", "11111", "10101"]
-		3:
-			rows = ["00111100", "01111110", "11111111", "01111110", "11011011", "01111110"]
-		4:
-			rows = [
-				"00011111000",
-				"00111111100",
-				"01111111110",
-				"00111111100",
-				"01101101110",
-				"00111111100",
-				"01101101110",
-				"00111111100",
-			]
-		_:
-			rows = [
-				"000111111000",
-				"001111111100",
-				"011111111110",
-				"001111111100",
-				"011011110110",
-				"001111111100",
-				"011011110110",
-				"001111111100",
-				"011011110110",
-				"000111111000",
-			]
-	var top := bottom_y - rows.size()
+	if scale >= 5:
+		## Cleaned measured silhouette (JPEG speckles removed).
+		rows = [
+			"01100111100110",
+			"01111111111110",
+			"01100111100110",
+			"11011111111101",
+			"01111111111110",
+			"00011111111000",
+			"00011111111000",
+			"01111111111110",
+			"11000000000011",
+		]
+	else:
+		match clampi(scale, 1, 4):
+			1:
+				rows = ["11", "11"]
+			2:
+				rows = ["0110", "1111", "1111"]
+			3:
+				rows = ["0011100", "0111110", "1111111", "0111110"]
+			_:
+				## Near opponent ~10×6 from reference yellow car.
+				rows = [
+					"0011111000",
+					"0111111100",
+					"0111111100",
+					"1111111111",
+					"0111111110",
+					"0001111000",
+				]
+	var top := bottom_y - rows.size() + 1
 	for ri in range(rows.size()):
 		var row: String = rows[ri]
 		var x0 := cx - row.length() / 2
@@ -218,34 +215,36 @@ func _draw_car_pixels(cx: int, bottom_y: int, scale: int, col: Color) -> void:
 
 
 func _draw_panel() -> void:
-	draw_rect(Rect2(0, PANEL_Y, W, H - PANEL_Y), COL_BLACK)
-
-	var box_x := 24
-	var box_y := PANEL_Y + 3
-	var box_w := 112
-	var box_h := 26
-	# Thick red bezel like the reference
-	draw_rect(Rect2(box_x, box_y, box_w, box_h), COL_PANEL_RED)
-	draw_rect(Rect2(box_x + 3, box_y + 2, box_w - 6, box_h - 4), COL_PANEL_TAN)
+	var L := _FL
+	draw_rect(Rect2(0, L.PANEL_Y, L.WIDTH, L.HEIGHT - L.PANEL_Y), L.COL_BLACK)
+	var box := L.PANEL_BOX
+	## Reference instrument is predominantly red with black digits (tan only as
+	## mid-tone JPEG average of orange-red); fill solid red like the TIA look.
+	draw_rect(Rect2(box), L.COL_PANEL_RED)
 
 	var km := 0
 	var day := 1
 	var cars_left := 200
-	if session != null:
+	if not fidelity_override.is_empty():
+		km = int(fidelity_override.get("km", 970))
+		day = int(fidelity_override.get("day", 6))
+		cars_left = int(fidelity_override.get("cars_left", 208))
+	elif session != null:
 		km = int(session.road.position_z / 80.0) % 10000
+		day = 1
 		cars_left = maxi(0, 200 - session.overtake_count)
 
-	# Thick 2600-style digits (px=2 → chunky)
-	_draw_digits(box_x + 8, box_y + 4, "%04d" % km, 2)
-	_draw_mini_car(box_x + 78, box_y + 4)
-	_draw_digits(box_x + 92, box_y + 4, "1", 2)
+	## Digit positions from dark-pixel clusters in the reference panel.
+	## Top row ≈ y160–164 @ x60+; bottom ≈ y172–177 @ x51+.
+	_draw_digits(60, 160, "%04d" % km, 1)
+	_draw_dual_car_icon(93, 160)
 
-	_draw_digits(box_x + 8, box_y + 15, "%d" % day, 2)
-	_draw_trophy(box_x + 28, box_y + 14)
-	_draw_digits(box_x + 48, box_y + 15, "%03d" % cars_left, 2)
+	_draw_digits(51, 172, "%d" % day, 1)
+	_draw_panel_mark(66, 172)
+	_draw_digits(78, 172, "%03d" % cars_left, 1)
 
-	_draw_rainbow(4, H - 9)
-	_draw_pixel_text(26, H - 10, "ACTIVISION", Color("F0F0F0"))
+	_draw_rainbow()
+	_draw_pixel_text(34, 186, "ACTIVISION", Color8(230, 230, 230))
 
 
 func _draw_digits(x: int, y: int, text: String, px: int) -> void:
@@ -255,7 +254,6 @@ func _draw_digits(x: int, y: int, text: String, px: int) -> void:
 
 
 func _draw_digit(x: int, y: int, ch: String, px: int) -> int:
-	## Extra-bold 3x5 digits for 80s instrument cluster look.
 	var glyphs := {
 		"0": ["111", "101", "101", "101", "111"],
 		"1": ["010", "110", "010", "010", "111"],
@@ -273,30 +271,30 @@ func _draw_digit(x: int, y: int, ch: String, px: int) -> int:
 		var s: String = g[row]
 		for col in range(s.length()):
 			if s[col] == "1":
-				draw_rect(Rect2(x + col * px, y + row * px, px, px), COL_DIGIT)
+				draw_rect(Rect2(x + col * px, y + row * px, px, px), _FL.COL_DIGIT)
 	return 3 * px
 
 
-func _draw_mini_car(x: int, y: int) -> void:
-	draw_rect(Rect2(x + 1, y, 6, 2), COL_DIGIT)
-	draw_rect(Rect2(x, y + 2, 8, 3), COL_DIGIT)
-	draw_rect(Rect2(x + 1, y + 5, 6, 1), COL_DIGIT)
+func _draw_dual_car_icon(x: int, y: int) -> void:
+	## Two tiny side-by-side cars as on the reference top row.
+	draw_rect(Rect2(x, y + 1, 5, 3), _FL.COL_DIGIT)
+	draw_rect(Rect2(x + 1, y, 3, 1), _FL.COL_DIGIT)
+	draw_rect(Rect2(x + 7, y + 1, 5, 3), _FL.COL_DIGIT)
+	draw_rect(Rect2(x + 8, y, 3, 1), _FL.COL_DIGIT)
 
 
-func _draw_trophy(x: int, y: int) -> void:
-	draw_rect(Rect2(x + 1, y, 5, 1), COL_DIGIT)
-	draw_rect(Rect2(x, y + 1, 7, 3), COL_DIGIT)
-	draw_rect(Rect2(x + 2, y + 4, 3, 2), COL_DIGIT)
-	draw_rect(Rect2(x + 1, y + 6, 5, 1), COL_DIGIT)
+func _draw_panel_mark(x: int, y: int) -> void:
+	## Trophy glyph beside cars-remaining (measured role in the instrument panel).
+	draw_rect(Rect2(x + 1, y, 5, 1), _FL.COL_DIGIT)
+	draw_rect(Rect2(x, y + 1, 7, 3), _FL.COL_DIGIT)
+	draw_rect(Rect2(x + 2, y + 4, 3, 2), _FL.COL_DIGIT)
+	draw_rect(Rect2(x + 1, y + 6, 5, 1), _FL.COL_DIGIT)
 
 
-func _draw_rainbow(x: int, y: int) -> void:
-	var colors := [
-		Color("AA44CC"), Color("4466EE"), Color("22CC44"),
-		Color("EEEE22"), Color("EE8822"), Color("EE2222"),
-	]
-	for i in range(colors.size()):
-		draw_rect(Rect2(x, y + i, 20, 1), colors[i])
+func _draw_rainbow() -> void:
+	## Measured Activision rainbow bar: x 12–32, y 185–191 (one color per row).
+	for y in _FL.RAINBOW_ROWS.keys():
+		draw_rect(Rect2(12, int(y), 21, 1), _FL.RAINBOW_ROWS[y])
 
 
 func _draw_pixel_text(x: int, y: int, text: String, col: Color) -> void:
