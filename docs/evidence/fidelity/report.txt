@@ -1,0 +1,11 @@
+ref=docs/reference/enduro_day_ref_160.png
+godot=docs/evidence/fidelity/godot_day_160.png
+mean_abs_channel_error=5.0766
+pixels_mismatch_gt30=2173 (7.07%)
+region[sky] mean_abs=0.5160 mismatch_gt30=82/10240
+region[playfield] mean_abs=4.7592 mismatch_gt30=812/13920
+region[panel] mean_abs=12.8691 mismatch_gt30=1279/6560
+
+NOTE: Exact pixel identity is not claimed. JPEG source reference,
+approximated TIA fonts, and scaled opponent masks prevent bit-identical
+frames. Use images + regions as diagnostic; owner approval is final.
